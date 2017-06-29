@@ -53,6 +53,12 @@ abstract class spout_base extends \core\dataformat\base {
             $this->writer->setTempFolder(make_request_directory());
         }
         $filename = $this->filename . $this->get_extension();
+
+        // if user is using IE, urlencode the filename so that multibyte file name will show up correctly on popup
+        if (\core_useragent::is_ie()) {
+            $filename = rawurlencode($filename);
+        }
+
         $this->writer->openToBrowser($filename);
         if ($this->sheettitle && $this->writer instanceof \Box\Spout\Writer\AbstractMultiSheetsWriter) {
             $sheet = $this->writer->getCurrentSheet();
