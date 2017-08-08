@@ -346,7 +346,11 @@ function users_order_by_sql($usertablealias = '', $search = null, context $conte
         $tableprefix = '';
     }
 
-    $sort = "{$tableprefix}lastname, {$tableprefix}firstname, {$tableprefix}id";
+    if ($CFG->userorderbyphoneticname) {
+        $sort = "{$tableprefix}lastnamephonetic, {$tableprefix}firstnamephonetic, {$tableprefix}id";
+    } else {
+        $sort = "{$tableprefix}lastname, {$tableprefix}firstname, {$tablepr     efix}id";
+    }
     $params = array();
 
     if (!$search) {
