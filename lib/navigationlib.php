@@ -3490,7 +3490,8 @@ class navbar extends navigation_node {
             'text' => $this->page->navigation->text,
             'shorttext' => $this->page->navigation->shorttext,
             'key' => $this->page->navigation->key,
-            'action' => $this->page->navigation->action
+            'action' => $this->page->navigation->action,
+            'hidden' => $this->hidden
         ));
 
         if (count($this->prependchildren) > 0) {
