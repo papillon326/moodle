@@ -154,22 +154,43 @@ function report_stats_report($course, $report, $mode, $user, $roleid, $time) {
         }
 
         $table->align = array('left','left','left','left','left','left','left','left');
-        $table->data[] = array(html_writer::label(get_string('course'), 'menucourse'), html_writer::select($courseoptions, 'course', $course->id, false),
-                               html_writer::label(get_string('users'), 'menuuserid'), html_writer::select($users, 'userid', $userid, false),
-                               html_writer::label(get_string('statsreporttype'), 'menureport'), html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
-                               html_writer::label(get_string('statstimeperiod'), 'menutime'), html_writer::select($timeoptions, 'time', $time, false),
-                               '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />');
+        $table->head = array(
+                html_writer::label(get_string('course'), 'menucourse'),
+                html_writer::label(get_string('users'), 'menuuserid'),
+                html_writer::label(get_string('statsreporttype'), 'menureport'),
+                html_writer::label(get_string('statstimeperiod'), 'menutime')
+            );
+        $table->data[] = array(
+                html_writer::select($courseoptions, 'course', $course->id, false),
+                html_writer::select($users, 'userid', $userid, false),
+                html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
+                html_writer::select($timeoptions, 'time', $time, false),
+                '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />'
+            );
     } else if ($mode == STATS_MODE_RANKED) {
         $table->align = array('left','left','left','left','left','left');
-        $table->data[] = array(html_writer::label(get_string('statsreporttype'), 'menureport'), html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
-                               html_writer::label(get_string('statstimeperiod'), 'menutime'), html_writer::select($timeoptions, 'time', $time, false),
-                               '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />');
+        $table->head = array(
+                html_writer::label(get_string('statsreporttype'), 'menureport'),
+                html_writer::label(get_string('statstimeperiod'), 'menutime'),
+            );
+        $table->data[] = array(
+                html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
+                html_writer::select($timeoptions, 'time', $time, false),
+                '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />'
+            );
     } else if ($mode == STATS_MODE_GENERAL) {
         $table->align = array('left','left','left','left','left','left','left');
-        $table->data[] = array(html_writer::label(get_string('course'), 'menucourse'), html_writer::select($courseoptions, 'course', $course->id, false),
-                               html_writer::label(get_string('statsreporttype'), 'menureport'), html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
-                               html_writer::label(get_string('statstimeperiod'), 'menutime'), html_writer::select($timeoptions, 'time', $time, false),
-                               '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />');
+        $table->head = array(
+                html_writer::label(get_string('course'), 'menucourse'),
+                html_writer::label(get_string('statsreporttype'), 'menureport'),
+                html_writer::label(get_string('statstimeperiod'), 'menutime')
+            );
+        $table->data[] = array(
+                html_writer::select($courseoptions, 'course', $course->id, false),
+                html_writer::select($reportoptions, 'report', ($report == 5) ? $report.$roleid : $report, false),
+                html_writer::select($timeoptions, 'time', $time, false),
+                '<input type="submit" class="btn btn-secondary" value="'.get_string('view').'" />'
+            );
     }
 
     echo '<form action="index.php" method="post">'."\n"
@@ -199,7 +220,7 @@ function report_stats_report($course, $report, $mode, $user, $roleid, $time) {
         if (!empty($param->sql)) {
             $sql = $param->sql;
         } else {
-            //TODO: lceanup this ugly mess
+            //TODO: cleanup this ugly mess
             $sql = 'SELECT '.((empty($param->fieldscomplete)) ? 'id,roleid,timeend,' : '').$param->fields
                 .' FROM {stats_'.$param->table.'} WHERE '
                 .(($course->id == SITEID) ? '' : ' courseid = '.$course->id.' AND ')

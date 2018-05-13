@@ -82,14 +82,32 @@ $reporttypemenu .= html_writer::select($reportoptions,'report',$report, false);
 $timeoptionsmenu = html_writer::label(get_string('time'), 'menutime', false, array('class' => 'accesshide'));
 $timeoptionsmenu .= html_writer::select($timeoptions,'time',$time, false);
 
-$table->data[] = array(get_string('statsreporttype'),$reporttypemenu,
-                       get_string('statstimeperiod'),$timeoptionsmenu,
-                       html_writer::label(get_string('numberofcourses'), 'numcourses', false, array('class' => 'accesshide')) .
-                       html_writer::empty_tag('input', array('type' => 'text', 'class' => 'form-control',
-                           'id' => 'numcourses', 'name' => 'numcourses', 'size' => '3', 'maxlength' => '2',
-                           'value' => $numcourses)),
-                       html_writer::empty_tag('input', array('type' => 'submit', 'class' => 'btn btn-secondary',
-                           'value' => get_string('view'))));
+$table->head = array(
+        get_string('statsreporttype'),
+        get_string('statstimeperiod'),
+        html_writer::label(
+                get_string('numberofcourses'), 'numcourses', false, array('class' => 'accesshide')
+            )
+    );
+$table->data[] = array(
+        $reporttypemenu,
+        $timeoptionsmenu,
+        html_writer::empty_tag(
+                'input',
+                array(
+                        'type' => 'text', 'class' => 'form-control',
+                        'id' => 'numcourses', 'name' => 'numcourses',
+                        'size' => '3', 'maxlength' => '2', 'value' => $numcourses
+                    )
+            ),
+        html_writer::empty_tag(
+                'input',
+                array(
+                        'type' => 'submit', 'class' => 'btn btn-secondary',
+                        'value' => get_string('view')
+                    )
+            )
+    );
 
 echo html_writer::table($table);
 echo html_writer::end_tag('div');
