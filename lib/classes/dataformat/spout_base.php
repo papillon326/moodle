@@ -58,7 +58,7 @@ abstract class spout_base extends \core\dataformat\base {
         $filename = $this->filename . $this->get_extension();
 
         // if user is using IE, urlencode the filename so that multibyte file name will show up correctly on popup
-        if (\core_useragent::is_ie()) {
+        if (\core_useragent::is_ie() || \core_useragent::is_edge()) {
             $filename = rawurlencode($filename);
         }
 
