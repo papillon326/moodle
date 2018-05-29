@@ -23,7 +23,7 @@
  */
 
 $string['defaulttab'] = 'Default tab';
-$string['defaulttab_desc'] = 'This is the default tab that will be shown to a user.';
+$string['defaulttab_desc'] = 'The tab that will be displayed when a user first views their course overview. When returning to their course overview, the user\'s active tab is remembered.';
 $string['future'] = 'Future';
 $string['inprogress'] = 'In progress';
 $string['morecourses'] = 'More courses';
@@ -44,3 +44,4 @@ $string['sortbydates'] = 'Sort by dates';
 $string['timeline'] = 'Timeline';
 $string['viewcourse'] = 'View course';
 $string['viewcoursename'] = 'View course {$a}';
+$string['privacy:metadata:overviewlasttab'] = 'This stores the last tab selected by the user on the overview block.';

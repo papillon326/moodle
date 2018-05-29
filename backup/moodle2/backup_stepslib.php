@@ -529,7 +529,7 @@ class backup_enrolments_structure_step extends backup_structure_step {
         $enrol->annotate_ids('role', 'roleid');
 
         // Add enrol plugin structure.
-        $this->add_plugin_structure('enrol', $enrol, false);
+        $this->add_plugin_structure('enrol', $enrol, true);
 
         return $enrolments;
     }
@@ -878,13 +878,22 @@ class backup_calendarevents_structure_step extends backup_structure_step {
             $calendar_items_params = array('courseid'=>backup::VAR_COURSEID);
             $event->set_source_sql($calendar_items_sql, $calendar_items_params);
         } else if ($this->name == 'activity_calendar') {
-            $params = array('instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME);
+            // We don't backup action events.
+            $params = array('instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME,
+                'type' => array('sqlparam' => CALENDAR_EVENT_TYPE_ACTION));
             // If we don't want to include the userinfo in the backup then setting the courseid
             // will filter out all of the user override events (which have a course id of zero).
+            $coursewhere = "";
             if (!$this->get_setting_value('userinfo')) {
                 $params['courseid'] = backup::VAR_COURSEID;
+                $coursewhere = " AND courseid = :courseid";
             }
-            $event->set_source_table('event', $params);
+            $calendarsql = "SELECT * FROM {event}
+                             WHERE instance = :instance
+                               AND type <> :type
+                               AND modulename = :modulename";
+            $calendarsql = $calendarsql . $coursewhere;
+            $event->set_source_sql($calendarsql, $params);
         } else {
             $event->set_source_table('event', array('courseid' => backup::VAR_COURSEID, 'instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME));
         }
@@ -1410,8 +1419,9 @@ class backup_block_instance_structure_step extends backup_structure_step {
         // Define each element separated
 
         $block = new backup_nested_element('block', array('id', 'contextid', 'version'), array(
-            'blockname', 'parentcontextid', 'showinsubcontexts', 'pagetypepattern',
-            'subpagepattern', 'defaultregion', 'defaultweight', 'configdata'));
+                'blockname', 'parentcontextid', 'showinsubcontexts', 'pagetypepattern',
+                'subpagepattern', 'defaultregion', 'defaultweight', 'configdata',
+                'timecreated', 'timemodified'));
 
         $positions = new backup_nested_element('block_positions');
 
@@ -2224,7 +2234,7 @@ class backup_questions_structure_step extends backup_structure_step {
 
         $tags = new backup_nested_element('tags');
 
-        $tag = new backup_nested_element('tag', array('id'), array('name', 'rawname'));
+        $tag = new backup_nested_element('tag', array('id', 'contextid'), array('name', 'rawname'));
 
         // Build the tree
 
@@ -2256,7 +2266,7 @@ class backup_questions_structure_step extends backup_structure_step {
                 ORDER BY id',
                 array('questionid' => backup::VAR_PARENTID));
 
-        $tag->set_source_sql("SELECT t.id, t.name, t.rawname
+        $tag->set_source_sql("SELECT t.id, ti.contextid, t.name, t.rawname
                               FROM {tag} t
                               JOIN {tag_instance} ti ON ti.tagid = t.id
                               WHERE ti.itemid = ?

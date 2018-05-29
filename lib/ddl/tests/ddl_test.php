@@ -52,6 +52,7 @@ class core_ddl_testcase extends database_driver_testcase {
         $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
         $table->add_field('grade', XMLDB_TYPE_NUMBER, '20,0', null, null, null, null);
         $table->add_field('percent', XMLDB_TYPE_NUMBER, '5,2', null, null, null, 66.6);
+        $table->add_field('bignum', XMLDB_TYPE_NUMBER, '38,18', null, null, null, 1234567890.1234);
         $table->add_field('warnafter', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
         $table->add_field('blockafter', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
         $table->add_field('blockperiod', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
@@ -414,10 +415,10 @@ class core_ddl_testcase extends database_driver_testcase {
             $this->assertInstanceOf('coding_exception', $e);
         }
 
-        // Invalid decimal length.
+        // Invalid decimal length - max precision is 38 digits.
         $table = new xmldb_table('test_table4');
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-        $table->add_field('num', XMLDB_TYPE_NUMBER, '21,10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('num', XMLDB_TYPE_NUMBER, '39,19', null, XMLDB_NOTNULL, null, null);
         $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $table->setComment("This is a test'n drop table. You can drop it safely");
 
@@ -430,10 +431,42 @@ class core_ddl_testcase extends database_driver_testcase {
             $this->assertInstanceOf('coding_exception', $e);
         }
 
-        // Invalid decimal decimals.
+        // Invalid decimal decimals - number of decimals can't be higher than total number of digits.
         $table = new xmldb_table('test_table4');
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('num', XMLDB_TYPE_NUMBER, '10,11', null, XMLDB_NOTNULL, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->setComment("This is a test'n drop table. You can drop it safely");
+
+        $this->tables[$table->getName()] = $table;
+
+        try {
+            $dbman->create_table($table);
+            $this->fail('Exception expected');
+        } catch (moodle_exception $e) {
+            $this->assertInstanceOf('coding_exception', $e);
+        }
+
+        // Invalid decimal whole number - the whole number part can't have more digits than integer fields.
+        $table = new xmldb_table('test_table4');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('num', XMLDB_TYPE_NUMBER, '38,17', null, XMLDB_NOTNULL, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->setComment("This is a test'n drop table. You can drop it safely");
+
+        $this->tables[$table->getName()] = $table;
+
+        try {
+            $dbman->create_table($table);
+            $this->fail('Exception expected');
+        } catch (moodle_exception $e) {
+            $this->assertInstanceOf('coding_exception', $e);
+        }
+
+        // Invalid decimal decimals - negative scale not supported.
+        $table = new xmldb_table('test_table4');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('num', XMLDB_TYPE_NUMBER, '30,-5', null, XMLDB_NOTNULL, null, null);
         $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $table->setComment("This is a test'n drop table. You can drop it safely");
 
@@ -2112,6 +2145,55 @@ class core_ddl_testcase extends database_driver_testcase {
 
             $this->assertNotEquals($result2, $result3);
             $this->assertRegExp('/_fl4_/', $result3);
+        }
+    }
+
+    /**
+     * Data provider for test_get_enc_quoted().
+     *
+     * @return array The type-value pair fixture.
+     */
+    public function test_get_enc_quoted_provider() {
+        return array(
+            // Reserved: some examples from SQL-92.
+            [true, 'from'],
+            [true, 'table'],
+            [true, 'where'],
+            // Not reserved.
+            [false, 'my_awesome_column_name']
+        );
+    }
+
+    /**
+     * This is a test for sql_generator::getEncQuoted().
+     *
+     * @dataProvider test_get_enc_quoted_provider
+     * @param string $reserved Whether the column name is reserved or not.
+     * @param string $columnname The column name to be quoted, according to the value of $reserved.
+     **/
+    public function test_get_enc_quoted($reserved, $columnname) {
+        $DB = $this->tdb;
+        $gen = $DB->get_manager()->generator;
+
+        if (!$reserved) {
+            // No need to quote the column name.
+            $this->assertSame($columnname, $gen->getEncQuoted($columnname));
+        } else {
+            // Column name should be quoted.
+            $dbfamily = $DB->get_dbfamily();
+
+            switch ($dbfamily) {
+                case 'mysql':
+                    $this->assertSame("`$columnname`", $gen->getEncQuoted($columnname));
+                    break;
+                case 'mssql': // The Moodle connection runs under 'QUOTED_IDENTIFIER ON'.
+                case 'oracle':
+                case 'postgres':
+                case 'sqlite':
+                default:
+                    $this->assertSame('"' . $columnname . '"', $gen->getEncQuoted($columnname));
+                    break;
+            }
         }
     }
 

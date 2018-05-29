@@ -91,14 +91,27 @@ class mod_lesson_lib_testcase extends advanced_testcase {
 
         $this->resetAfterTest();
         $this->setAdminUser();
-        $course = $this->getDataGenerator()->create_course();
+        $course = new stdClass();
+        $course->groupmode = SEPARATEGROUPS;
+        $course->groupmodeforce = true;
+        $course = $this->getDataGenerator()->create_course($course);
 
         // Create user.
-        $student = self::getDataGenerator()->create_user();
+        $studentg1 = self::getDataGenerator()->create_user();
+        $teacherg1 = self::getDataGenerator()->create_user();
+        $studentg2 = self::getDataGenerator()->create_user();
 
         // User enrolment.
         $studentrole = $DB->get_record('role', array('shortname' => 'student'));
-        $this->getDataGenerator()->enrol_user($student->id, $course->id, $studentrole->id, 'manual');
+        $teacherrole = $DB->get_record('role', array('shortname' => 'editingteacher'));
+        $this->getDataGenerator()->enrol_user($studentg1->id, $course->id, $studentrole->id, 'manual');
+        $this->getDataGenerator()->enrol_user($teacherg1->id, $course->id, $teacherrole->id, 'manual');
+        $this->getDataGenerator()->enrol_user($studentg2->id, $course->id, $studentrole->id, 'manual');
+
+        $group1 = $this->getDataGenerator()->create_group(array('courseid' => $course->id));
+        $group2 = $this->getDataGenerator()->create_group(array('courseid' => $course->id));
+        groups_add_member($group1, $studentg1);
+        groups_add_member($group2, $studentg2);
 
         $this->setCurrentTimeStart();
         $record = array(
@@ -136,8 +149,8 @@ class mod_lesson_lib_testcase extends advanced_testcase {
         $this->assertTrue($updates->answers->updated);
         $this->assertCount(2, $updates->answers->itemids);
 
-        // Now, do something in the lesson.
-        $this->setUser($student);
+        // Now, do something in the lesson with the two users.
+        $this->setUser($studentg1);
         mod_lesson_external::launch_attempt($lesson->id);
         $data = array(
             array(
@@ -152,6 +165,22 @@ class mod_lesson_lib_testcase extends advanced_testcase {
         mod_lesson_external::process_page($lesson->id, $tfrecord->id, $data);
         mod_lesson_external::finish_attempt($lesson->id);
 
+        $this->setUser($studentg2);
+        mod_lesson_external::launch_attempt($lesson->id);
+        $data = array(
+            array(
+                'name' => 'answerid',
+                'value' => $DB->get_field('lesson_answers', 'id', array('pageid' => $tfrecord->id, 'jumpto' => -1)),
+            ),
+            array(
+                'name' => '_qf__lesson_display_answer_form_truefalse',
+                'value' => 1,
+            )
+        );
+        mod_lesson_external::process_page($lesson->id, $tfrecord->id, $data);
+        mod_lesson_external::finish_attempt($lesson->id);
+
+        $this->setUser($studentg1);
         $updates = lesson_check_updates_since($cm, $onehourago);
 
         // Check question attempts, timers and new grades.
@@ -163,6 +192,33 @@ class mod_lesson_lib_testcase extends advanced_testcase {
 
         $this->assertTrue($updates->timers->updated);
         $this->assertCount(1, $updates->timers->itemids);
+
+        // Now, as teacher, check that I can see the two users (even in separate groups).
+        $this->setUser($teacherg1);
+        $updates = lesson_check_updates_since($cm, $onehourago);
+        $this->assertTrue($updates->userquestionattempts->updated);
+        $this->assertCount(2, $updates->userquestionattempts->itemids);
+
+        $this->assertTrue($updates->usergrades->updated);
+        $this->assertCount(2, $updates->usergrades->itemids);
+
+        $this->assertTrue($updates->usertimers->updated);
+        $this->assertCount(2, $updates->usertimers->itemids);
+
+        // Now, teacher can't access all groups.
+        groups_add_member($group1, $teacherg1);
+        assign_capability('moodle/site:accessallgroups', CAP_PROHIBIT, $teacherrole->id, context_module::instance($cm->id));
+        accesslib_clear_all_caches_for_unit_testing();
+        $updates = lesson_check_updates_since($cm, $onehourago);
+        // I will see only the studentg1 updates.
+        $this->assertTrue($updates->userquestionattempts->updated);
+        $this->assertCount(1, $updates->userquestionattempts->itemids);
+
+        $this->assertTrue($updates->usergrades->updated);
+        $this->assertCount(1, $updates->usergrades->itemids);
+
+        $this->assertTrue($updates->usertimers->updated);
+        $this->assertCount(1, $updates->usertimers->itemids);
     }
 
     public function test_lesson_core_calendar_provide_event_action_open() {
@@ -384,5 +440,287 @@ class mod_lesson_lib_testcase extends advanced_testcase {
         $this->assertEquals(mod_lesson_get_completion_active_rule_descriptions($cm2), []);
         $this->assertEquals(mod_lesson_get_completion_active_rule_descriptions($moddefaults), $activeruledescriptions);
         $this->assertEquals(mod_lesson_get_completion_active_rule_descriptions(new stdClass()), []);
+    }
+
+    /**
+     * An unknown event type should not change the lesson instance.
+     */
+    public function test_mod_lesson_core_calendar_event_timestart_updated_unknown_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $lessongenerator = $generator->get_plugin_generator('mod_lesson');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $lesson = $lessongenerator->create_instance(['course' => $course->id]);
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+        $DB->update_record('lesson', $lesson);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => $lesson->id,
+            'eventtype' => LESSON_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        mod_lesson_core_calendar_event_timestart_updated($event, $lesson);
+        $lesson = $DB->get_record('lesson', ['id' => $lesson->id]);
+        $this->assertEquals($timeopen, $lesson->available);
+        $this->assertEquals($timeclose, $lesson->deadline);
+    }
+
+    /**
+     * A LESSON_EVENT_TYPE_OPEN event should update the available property of the lesson activity.
+     */
+    public function test_mod_lesson_core_calendar_event_timestart_updated_open_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $lessongenerator = $generator->get_plugin_generator('mod_lesson');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeopen = $timeopen - DAYSECS;
+        $lesson = $lessongenerator->create_instance(['course' => $course->id]);
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+        $lesson->timemodified = $timemodified;
+        $DB->update_record('lesson', $lesson);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => $lesson->id,
+            'eventtype' => LESSON_EVENT_TYPE_OPEN,
+            'timestart' => $newtimeopen,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+        mod_lesson_core_calendar_event_timestart_updated($event, $lesson);
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+        $lesson = $DB->get_record('lesson', ['id' => $lesson->id]);
+
+        // Ensure the available property matches the event timestart.
+        $this->assertEquals($newtimeopen, $lesson->available);
+
+        // Ensure the deadline isn't changed.
+        $this->assertEquals($timeclose, $lesson->deadline);
+
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $lesson->timemodified);
+
+        // Confirm that a module updated event is fired when the module is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * A LESSON_EVENT_TYPE_CLOSE event should update the deadline property of the lesson activity.
+     */
+    public function test_mod_lesson_core_calendar_event_timestart_updated_close_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $lessongenerator = $generator->get_plugin_generator('mod_lesson');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeclose = $timeclose + DAYSECS;
+        $lesson = $lessongenerator->create_instance(['course' => $course->id]);
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+        $lesson->timemodified = $timemodified;
+        $DB->update_record('lesson', $lesson);
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => $lesson->id,
+            'eventtype' => LESSON_EVENT_TYPE_CLOSE,
+            'timestart' => $newtimeclose,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+        mod_lesson_core_calendar_event_timestart_updated($event, $lesson);
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+        $lesson = $DB->get_record('lesson', ['id' => $lesson->id]);
+        // Ensure the deadline property matches the event timestart.
+        $this->assertEquals($newtimeclose, $lesson->deadline);
+        // Ensure the available isn't changed.
+        $this->assertEquals($timeopen, $lesson->available);
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $lesson->timemodified);
+        // Confirm that a module updated event is fired when the module is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * An unknown event type should not have any limits.
+     */
+    public function test_mod_lesson_core_calendar_get_valid_event_timestart_range_unknown_event() {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $lesson = new \stdClass();
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => 1,
+            'eventtype' => LESSON_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        list ($min, $max) = mod_lesson_core_calendar_get_valid_event_timestart_range($event, $lesson);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The open event should be limited by the lesson's deadline property, if it's set.
+     */
+    public function test_mod_lesson_core_calendar_get_valid_event_timestart_range_open_event() {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $lesson = new \stdClass();
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => 1,
+            'eventtype' => LESSON_EVENT_TYPE_OPEN,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_lesson_core_calendar_get_valid_event_timestart_range($event, $lesson);
+        $this->assertNull($min);
+        $this->assertEquals($timeclose, $max[0]);
+
+        // No timeclose value should result in no upper limit.
+        $lesson->deadline = 0;
+        list ($min, $max) = mod_lesson_core_calendar_get_valid_event_timestart_range($event, $lesson);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The close event should be limited by the lesson's available property, if it's set.
+     */
+    public function test_mod_lesson_core_calendar_get_valid_event_timestart_range_close_event() {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $lesson = new \stdClass();
+        $lesson->available = $timeopen;
+        $lesson->deadline = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'lesson',
+            'instance' => 1,
+            'eventtype' => LESSON_EVENT_TYPE_CLOSE,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_lesson_core_calendar_get_valid_event_timestart_range($event, $lesson);
+        $this->assertEquals($timeopen, $min[0]);
+        $this->assertNull($max);
+
+        // No deadline value should result in no upper limit.
+        $lesson->available = 0;
+        list ($min, $max) = mod_lesson_core_calendar_get_valid_event_timestart_range($event, $lesson);
+        $this->assertNull($min);
+        $this->assertNull($max);
     }
 }
