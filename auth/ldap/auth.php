@@ -721,7 +721,11 @@ class auth_plugin_ldap extends auth_plugin_base {
                     continue;
                 }
                 if ($ldap_pagedresults) {
-                    ldap_control_paged_result_response($ldapconnection, $ldap_result, $ldap_cookie);
+                    $paged_resp = ldap_control_paged_result_response($ldapconnection, $ldap_result, $ldap_cookie);
+                    // ldap_control_paged_result_response() does not overwrite $ldap_cookie if failed. avoid infinite loop.
+                    if ($paged_resp === false) {
+                        $ldap_cookie = null;
+                    }
                 }
                 if ($entry = @ldap_first_entry($ldapconnection, $ldap_result)) {
                     do {
