@@ -237,7 +237,7 @@ function users_search_sql($search, $u = 'u', $searchanywhere = true, array $extr
     }
 
     // If we have a $search string, put a field LIKE '$search%' condition on each field.
-    if ($search) {
+    if (isset($search)) {
         $conditions = array(
             $DB->sql_fullname($u . 'firstname', $u . 'lastname'),
             $conditions[] = $u . 'lastname'
